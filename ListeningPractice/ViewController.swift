@@ -7,7 +7,7 @@ class ViewController: UIViewController, UIDocumentPickerDelegate, AVAudioPlayerD
     @IBOutlet weak var endTimeField: UITextField!
     @IBOutlet weak var loopCountField: UITextField!
     @IBOutlet weak var statusLabel: UILabel!
-    @IBOutlet weak var progressView: UIProgressView!
+    @IBOutlet weak var progressSlider: UISlider!
     @IBOutlet weak var timeLabel: UILabel!
     @IBOutlet weak var audioTextView: UITextView!
     @IBOutlet weak var volumeBoostSwitch: UISwitch!
@@ -19,6 +19,7 @@ class ViewController: UIViewController, UIDocumentPickerDelegate, AVAudioPlayerD
     var timer: Timer?
     var currentAudioURL: URL?
     var initialDuration: Double = 0.0
+    var isPaused: Bool = false
     
     override func viewDidLoad() {
         super.viewDidLoad()
@@ -34,9 +35,11 @@ class ViewController: UIViewController, UIDocumentPickerDelegate, AVAudioPlayerD
         statusLabel.numberOfLines = 0
         statusLabel.lineBreakMode = .byWordWrapping
         
-        progressView.progress = 0.0
-        progressView.progressTintColor = .blue
-        progressView.trackTintColor = .lightGray
+        progressSlider.minimumValue = 0.0
+        progressSlider.maximumValue = 1.0
+        progressSlider.value = 0.0
+        progressSlider.addTarget(self, action: #selector(sliderValueChanged(_:)), for: .valueChanged)
+        progressSlider.addTarget(self, action: #selector(sliderTouchUp(_:)), for: [.touchUpInside, .touchUpOutside])
         
         timeLabel.text = "00:00:00 / 00:00:00"
         audioTextView.text = "在此输入或粘贴音频文本"
@@ -51,8 +54,9 @@ class ViewController: UIViewController, UIDocumentPickerDelegate, AVAudioPlayerD
     
     func setupAudioSession() {
         do {
-            try AVAudioSession.sharedInstance().setCategory(.playback, options: .defaultToSpeaker)
+            try AVAudioSession.sharedInstance().setCategory(.playback)
             try AVAudioSession.sharedInstance().setActive(true)
+            print("音频会话配置成功")
         } catch {
             print("音频会话配置失败: \(error)")
         }
@@ -72,7 +76,7 @@ class ViewController: UIViewController, UIDocumentPickerDelegate, AVAudioPlayerD
         
         statusLabel.text = "正在打开文件选择器..."
         
-        let documentPicker = UIDocumentPickerViewController(forOpeningContentTypes: [.audio], asCopy: false) // 改为 asCopy: false
+        let documentPicker = UIDocumentPickerViewController(forOpeningContentTypes: [.audio], asCopy: false)
         documentPicker.delegate = self
         documentPicker.shouldShowFileExtensions = true
         present(documentPicker, animated: true) {
@@ -106,7 +110,6 @@ class ViewController: UIViewController, UIDocumentPickerDelegate, AVAudioPlayerD
         do {
             let _ = try selectedURL.checkResourceIsReachable()
             
-            // 手动复制文件到应用沙盒
             let documentsDirectory = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
             let destinationURL = documentsDirectory.appendingPathComponent(selectedURL.lastPathComponent)
             if FileManager.default.fileExists(atPath: destinationURL.path) {
@@ -118,7 +121,7 @@ class ViewController: UIViewController, UIDocumentPickerDelegate, AVAudioPlayerD
             handleAudioFile(destinationURL, originalName: selectedURL.lastPathComponent)
         } catch {
             print("无法访问或复制文件: \(error)")
-            if (error as NSError).code == 260 { // 文件未找到
+            if (error as NSError).code == 260 {
                 statusLabel.text = "导入失败: 文件未下载，请在 OneDrive 中设为离线可用"
             } else {
                 statusLabel.text = "导入失败: \(error.localizedDescription)"
@@ -180,20 +183,28 @@ class ViewController: UIViewController, UIDocumentPickerDelegate, AVAudioPlayerD
                 player = try AVAudioPlayer(contentsOf: url)
                 player?.delegate = self
                 player?.currentTime = startTime
-                loopCount = loops
+                loopCount = loops // 始终更新 loopCount
                 currentLoop = 0
-                progressView.progress = 0.0
+                progressSlider.value = 0.0
                 currentAudioURL = url
                 applyVolumeBoost()
                 print("已加载新音频: \(url.lastPathComponent)")
             } else if !player!.isPlaying {
-                player?.currentTime = startTime
-                applyVolumeBoost()
-                print("从停止或暂停位置重新播放，设置时间为: \(startTime)")
+                loopCount = loops // 始终更新 loopCount
+                if isPaused {
+                    applyVolumeBoost()
+                    print("从暂停位置继续播放，当前时间: \(player!.currentTime)")
+                } else {
+                    player?.currentTime = startTime
+                    currentLoop = 0 // 重置当前循环
+                    applyVolumeBoost()
+                    print("从起始位置重新播放，设置时间为: \(startTime)")
+                }
             }
             
             player?.play()
             statusLabel.text = "正在播放 (第 \(currentLoop + 1) 次 / \(loopCount))"
+            isPaused = false
             
             timer?.invalidate()
             timer = Timer.scheduledTimer(withTimeInterval: 0.1, repeats: true) { [weak self] timer in
@@ -208,7 +219,9 @@ class ViewController: UIViewController, UIDocumentPickerDelegate, AVAudioPlayerD
                 
                 let totalDuration = endTime - startTime
                 let currentProgress = (currentTime - startTime) / totalDuration
-                self.progressView.progress = Float(max(0.0, min(1.0, currentProgress)))
+                if !self.progressSlider.isTracking {
+                    self.progressSlider.value = Float(max(0.0, min(1.0, currentProgress)))
+                }
                 self.timeLabel.text = "\(self.formatTime(currentTime)) / \(self.formatTime(endTime))"
                 
                 if currentTime >= endTime - 0.05 || !player.isPlaying {
@@ -216,7 +229,7 @@ class ViewController: UIViewController, UIDocumentPickerDelegate, AVAudioPlayerD
                     if self.currentLoop < self.loopCount {
                         player.currentTime = startTime
                         player.play()
-                        self.progressView.progress = 0.0
+                        self.progressSlider.value = 0.0
                         self.timeLabel.text = "\(self.formatTime(startTime)) / \(self.formatTime(endTime))"
                         print("开始第 \(self.currentLoop + 1) 次循环")
                     } else {
@@ -234,13 +247,16 @@ class ViewController: UIViewController, UIDocumentPickerDelegate, AVAudioPlayerD
     }
     
     private func stopCurrentAudio() {
-        player?.stop()
+        guard let player = player else { return }
+        player.stop()
         timer?.invalidate()
+        player.currentTime = Double(startTimeField.text ?? "0") ?? 0.0
         statusLabel.text = "已停止"
         currentLoop = 0
-        progressView.progress = 0.0
+        progressSlider.value = 0.0
         timeLabel.text = "00:00:00 / \(endTimeField.text != nil ? formatTime(Double(endTimeField.text!) ?? 0.0) : "00:00:00")"
-        print("手动停止当前播放")
+        isPaused = false
+        print("手动停止当前播放，时间重置为: \(player.currentTime)")
     }
     
     @IBAction func playTapped(_ sender: UIButton) {
@@ -261,6 +277,7 @@ class ViewController: UIViewController, UIDocumentPickerDelegate, AVAudioPlayerD
         player.pause()
         timer?.invalidate()
         statusLabel.text = "已暂停 (第 \(currentLoop + 1) 次 / \(loopCount))"
+        isPaused = true
         print("音频暂停，当前时间: \(player.currentTime)")
     }
     
@@ -272,34 +289,80 @@ class ViewController: UIViewController, UIDocumentPickerDelegate, AVAudioPlayerD
     }
     
     @IBAction func markStartTimeTapped(_ sender: UIButton) {
-        guard let player = player, player.isPlaying else {
-            print("音频未播放，无法打点开始时间")
+        guard let url = audioURL,
+              let endTimeStr = endTimeField.text, let endTime = Double(endTimeStr),
+              let startTimeStr = startTimeField.text, let startTime = Double(startTimeStr) else {
+            print("音频未加载或时间输入无效，无法打点开始时间")
+            statusLabel.text = "请先导入音频"
             return
         }
-        let currentTime = player.currentTime
-        guard let endTime = Double(endTimeField.text ?? "0"), currentTime < endTime else {
-            print("当前时间 (\(currentTime)) 不小于结束时间 (\(endTimeField.text ?? "N/A"))，无法设置为开始时间")
+        
+        let totalDuration = endTime - startTime
+        let currentTime: Double
+        if let player = player, player.isPlaying {
+            currentTime = player.currentTime
+        } else {
+            currentTime = startTime + Double(progressSlider.value) * totalDuration
+        }
+        
+        guard currentTime < endTime else {
+            print("当前时间 (\(currentTime)) 不小于结束时间 (\(endTime))，无法设置为开始时间")
             return
         }
+        
         startTimeField.text = String(format: "%.1f", currentTime)
-        player.currentTime = currentTime
-        progressView.progress = 0.0
+        if let player = player {
+            player.currentTime = currentTime
+        } else if url != currentAudioURL {
+            do {
+                player = try AVAudioPlayer(contentsOf: url)
+                player?.currentTime = currentTime
+                currentAudioURL = url
+            } catch {
+                print("初始化播放器失败: \(error)")
+            }
+        }
+        progressSlider.value = Float((currentTime - startTime) / totalDuration)
         timeLabel.text = "\(formatTime(currentTime)) / \(formatTime(endTime))"
         print("已将开始时间设置为: \(currentTime)")
     }
     
     @IBAction func markEndTimeTapped(_ sender: UIButton) {
-        guard let player = player, player.isPlaying else {
-            print("音频未播放，无法打点结束时间")
+        guard let url = audioURL,
+              let startTimeStr = startTimeField.text, let startTime = Double(startTimeStr),
+              let endTimeStr = endTimeField.text, let endTime = Double(endTimeStr) else {
+            print("音频未加载或时间输入无效，无法打点结束时间")
+            statusLabel.text = "请先导入音频"
             return
         }
-        let currentTime = player.currentTime
-        guard let startTime = Double(startTimeField.text ?? "0"), currentTime > startTime else {
-            print("当前时间 (\(currentTime)) 不大于开始时间 (\(startTimeField.text ?? "N/A"))，无法设置为结束时间")
+        
+        let totalDuration = endTime - startTime
+        let currentTime: Double
+        if let player = player, player.isPlaying {
+            currentTime = player.currentTime
+        } else {
+            currentTime = startTime + Double(progressSlider.value) * totalDuration
+        }
+        
+        guard currentTime > startTime else {
+            print("当前时间 (\(currentTime)) 不大于开始时间 (\(startTime))，无法设置为结束时间")
             return
         }
+        
         endTimeField.text = String(format: "%.1f", currentTime)
-        timeLabel.text = "\(formatTime(player.currentTime)) / \(formatTime(currentTime))"
+        if let player = player {
+            player.currentTime = currentTime
+        } else if url != currentAudioURL {
+            do {
+                player = try AVAudioPlayer(contentsOf: url)
+                player?.currentTime = currentTime
+                currentAudioURL = url
+            } catch {
+                print("初始化播放器失败: \(error)")
+            }
+        }
+        progressSlider.value = Float((currentTime - startTime) / totalDuration)
+        timeLabel.text = "\(formatTime(currentTime)) / \(formatTime(endTime))"
         print("已将结束时间设置为: \(currentTime)")
     }
     
@@ -311,17 +374,15 @@ class ViewController: UIViewController, UIDocumentPickerDelegate, AVAudioPlayerD
         }
         startTimeField.text = "0"
         endTimeField.text = String(format: "%.1f", initialDuration)
-        progressView.progress = 0.0
+        progressSlider.value = 0.0
         timeLabel.text = "00:00:00 / \(formatTime(initialDuration))"
-        if let player = player, player.isPlaying {
+        if let player = player {
             player.currentTime = 0
         }
         print("时间已重置: 开始时间 = 0, 结束时间 = \(initialDuration)")
     }
     
-    @IBAction func volumeBoostToggled(_ sender: UISwitch
-                                      
-) {
+    @IBAction func volumeBoostToggled(_ sender: UISwitch) {
         applyVolumeBoost()
         print("音量增益设置为: \(sender.isOn ? "开启" : "关闭")")
     }
@@ -335,19 +396,40 @@ class ViewController: UIViewController, UIDocumentPickerDelegate, AVAudioPlayerD
         }
     }
     
+    @objc func sliderValueChanged(_ sender: UISlider) {
+        guard let startTimeStr = startTimeField.text, let startTime = Double(startTimeStr),
+              let endTimeStr = endTimeField.text, let endTime = Double(endTimeStr) else { return }
+        
+        let totalDuration = endTime - startTime
+        let newTime = startTime + Double(sender.value) * totalDuration
+        if let player = player {
+            player.currentTime = newTime
+        }
+        timeLabel.text = "\(formatTime(newTime)) / \(formatTime(endTime))"
+        print("滑块拖动，当前时间设置为: \(newTime)")
+    }
+    
+    @objc func sliderTouchUp(_ sender: UISlider) {
+        guard let player = player else { return }
+        if player.isPlaying {
+            player.play()
+            print("滑块松开，继续播放")
+        }
+    }
+    
     func audioPlayerDidFinishPlaying(_ player: AVAudioPlayer, successfully flag: Bool) {
         print("音频自然结束，flag: \(flag)")
         if currentLoop < loopCount - 1 {
             currentLoop += 1
             player.currentTime = Double(startTimeField.text ?? "0") ?? 0.0
             player.play()
-            progressView.progress = 0.0
+            progressSlider.value = 0.0
             timeLabel.text = "\(formatTime(Double(startTimeField.text ?? "0") ?? 0.0)) / \(formatTime(Double(endTimeField.text ?? "0") ?? 0.0))"
             print("自然结束触发第 \(currentLoop + 1) 次循环")
         } else {
             statusLabel.text = "播放完成"
             timer?.invalidate()
-            print("自然结束完成，总循环次数: \(loopCount)")
+            print("播放完成，总循环次数: \(loopCount)")
         }
     }
     

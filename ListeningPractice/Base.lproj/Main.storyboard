@@ -79,12 +79,8 @@
                                     <action selector="playTapped:" destination="BYZ-38-t0r" eventType="touchUpInside" id="4ky-e2-22Y"/>
                                 </connections>
                             </button>
-                            <progressView opaque="NO" contentMode="scaleToFill" verticalHuggingPriority="750" fixedFrame="YES" progress="0.5" translatesAutoresizingMaskIntoConstraints="NO" id="rdL-Ss-BgJ">
-                                <rect key="frame" x="32" y="152" width="339" height="4"/>
-                                <autoresizingMask key="autoresizingMask" flexibleMaxX="YES" flexibleMaxY="YES"/>
-                            </progressView>
                             <label opaque="NO" userInteractionEnabled="NO" contentMode="left" horizontalHuggingPriority="251" verticalHuggingPriority="251" fixedFrame="YES" text="0.0 / 0.0秒" textAlignment="natural" lineBreakMode="wordWrap" baselineAdjustment="alignBaselines" adjustsFontSizeToFit="NO" translatesAutoresizingMaskIntoConstraints="NO" id="W6q-5n-vav">
-                                <rect key="frame" x="32" y="132" width="161" height="21"/>
+                                <rect key="frame" x="32" y="118" width="161" height="21"/>
                                 <autoresizingMask key="autoresizingMask" flexibleMaxX="YES" flexibleMaxY="YES"/>
                                 <fontDescription key="fontDescription" type="system" pointSize="13"/>
                                 <nil key="textColor"/>
@@ -111,7 +107,7 @@
                                 </connections>
                             </button>
                             <label opaque="NO" userInteractionEnabled="NO" contentMode="left" horizontalHuggingPriority="251" verticalHuggingPriority="251" fixedFrame="YES" text="100LS Listening&amp;Speaking" textAlignment="center" lineBreakMode="tailTruncation" baselineAdjustment="alignBaselines" adjustsFontSizeToFit="NO" translatesAutoresizingMaskIntoConstraints="NO" id="njE-dg-6Ig">
-                                <rect key="frame" x="32" y="85" width="339" height="30"/>
+                                <rect key="frame" x="32" y="76" width="339" height="30"/>
                                 <autoresizingMask key="autoresizingMask" flexibleMaxX="YES" flexibleMaxY="YES"/>
                                 <fontDescription key="fontDescription" style="UICTFontTextStyleHeadline"/>
                                 <color key="textColor" white="0.33333333333333331" alpha="1" colorSpace="custom" customColorSpace="genericGamma22GrayColorSpace"/>
@@ -179,6 +175,10 @@
                                 <nil key="textColor"/>
                                 <nil key="highlightedColor"/>
                             </label>
+                            <slider opaque="NO" contentMode="scaleToFill" fixedFrame="YES" contentHorizontalAlignment="center" contentVerticalAlignment="center" value="0.5" minValue="0.0" maxValue="1" translatesAutoresizingMaskIntoConstraints="NO" id="r8E-25-P8G">
+                                <rect key="frame" x="30" y="140" width="343" height="30"/>
+                                <autoresizingMask key="autoresizingMask" flexibleMaxX="YES" flexibleMaxY="YES"/>
+                            </slider>
                         </subviews>
                         <viewLayoutGuide key="safeArea" id="6Tk-OE-BBY"/>
                         <color key="backgroundColor" systemColor="systemBackgroundColor"/>
@@ -196,7 +196,7 @@
                         <outlet property="audioTextView" destination="fDv-4r-tRM" id="42L-YN-Gss"/>
                         <outlet property="endTimeField" destination="txe-SL-aFW" id="fSg-cG-mcV"/>
                         <outlet property="loopCountField" destination="Q2o-IY-yPX" id="crf-Oa-UV9"/>
-                        <outlet property="progressView" destination="rdL-Ss-BgJ" id="hUU-rd-lsL"/>
+                        <outlet property="progressSlider" destination="r8E-25-P8G" id="eee-g4-uKd"/>
                         <outlet property="startTimeField" destination="L8q-CC-kp4" id="cb3-WF-6OB"/>
                         <outlet property="statusLabel" destination="bOb-ml-Rfh" id="4d0-Hl-QeE"/>
                         <outlet property="timeLabel" destination="W6q-5n-vav" id="Y18-CM-4aD"/>
