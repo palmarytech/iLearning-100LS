@@ -1,7 +1,7 @@
 import UIKit
 import AVFoundation
 
-class ViewController: UIViewController, UIDocumentPickerDelegate, AVAudioPlayerDelegate, UITextFieldDelegate, UITextViewDelegate {
+class ViewController: UIViewController, UIDocumentPickerDelegate, AVAudioPlayerDelegate, UITextFieldDelegate, UITextViewDelegate, UIPickerViewDataSource, UIPickerViewDelegate {
     
     @IBOutlet weak var startTimeField: UITextField!
     @IBOutlet weak var endTimeField: UITextField!
@@ -11,6 +11,7 @@ class ViewController: UIViewController, UIDocumentPickerDelegate, AVAudioPlayerD
     @IBOutlet weak var timeLabel: UILabel!
     @IBOutlet weak var audioTextView: UITextView!
     @IBOutlet weak var volumeBoostSwitch: UISwitch!
+    @IBOutlet weak var speedPicker: UIPickerView!
     
     var player: AVAudioPlayer?
     var audioURL: URL?
@@ -20,6 +21,8 @@ class ViewController: UIViewController, UIDocumentPickerDelegate, AVAudioPlayerD
     var currentAudioURL: URL?
     var initialDuration: Double = 0.0
     var isPaused: Bool = false
+    let playbackSpeeds: [Float] = [1.0, 0.85, 0.75, 0.5] // 可选速度
+    var selectedSpeed: Float = 1.0
     
     override func viewDidLoad() {
         super.viewDidLoad()
@@ -28,6 +31,12 @@ class ViewController: UIViewController, UIDocumentPickerDelegate, AVAudioPlayerD
         endTimeField.delegate = self
         loopCountField.delegate = self
         audioTextView.delegate = self
+        
+        // 配置速度选择器
+        speedPicker.dataSource = self
+        speedPicker.delegate = self
+        speedPicker.selectRow(0, inComponent: 0, animated: false) // 默认选择 1x
+        selectedSpeed = playbackSpeeds[0]
         
         let tap = UITapGestureRecognizer(target: self, action: #selector(dismissKeyboard))
         view.addGestureRecognizer(tap)
@@ -50,6 +59,29 @@ class ViewController: UIViewController, UIDocumentPickerDelegate, AVAudioPlayerD
         
         volumeBoostSwitch.isOn = false
         print("ViewController 已加载")
+    }
+    // UIPickerViewDataSource
+    func numberOfComponents(in pickerView: UIPickerView) -> Int {
+        return 1 // 单列
+    }
+
+    func pickerView(_ pickerView: UIPickerView, numberOfRowsInComponent component: Int) -> Int {
+        return playbackSpeeds.count // 行数等于速度选项数
+    }
+
+    // UIPickerViewDelegate
+    func pickerView(_ pickerView: UIPickerView, titleForRow row: Int, forComponent component: Int) -> String? {
+        return "\(playbackSpeeds[row])x" // 显示为 "1x", "0.85x" 等
+    }
+
+    func pickerView(_ pickerView: UIPickerView, didSelectRow row: Int, inComponent component: Int) {
+        selectedSpeed = playbackSpeeds[row] // 更新选中速度
+        applyPlaybackSpeed() // 应用新速度
+        print("选择播放速度: \(selectedSpeed)x")
+    }
+    private func applyPlaybackSpeed() {
+        guard let player = player else { return }
+        player.rate = selectedSpeed // 设置播放速度
     }
     
     func setupAudioSession() {
@@ -176,28 +208,32 @@ class ViewController: UIViewController, UIDocumentPickerDelegate, AVAudioPlayerD
             return
         }
         
-        print("开始播放: start=\(startTime), end=\(endTime), loops=\(loops)")
+        print("开始播放: start=\(startTime), end=\(endTime), loops=\(loops), speed=\(selectedSpeed)x")
         
         do {
             if player == nil || currentAudioURL != url {
                 player = try AVAudioPlayer(contentsOf: url)
                 player?.delegate = self
+                player?.enableRate = true // 启用变速播放
                 player?.currentTime = startTime
                 loopCount = loops // 始终更新 loopCount
                 currentLoop = 0
                 progressSlider.value = 0.0
                 currentAudioURL = url
                 applyVolumeBoost()
+                applyPlaybackSpeed() // 应用播放速度
                 print("已加载新音频: \(url.lastPathComponent)")
             } else if !player!.isPlaying {
                 loopCount = loops // 始终更新 loopCount
                 if isPaused {
                     applyVolumeBoost()
+                    applyPlaybackSpeed() // 应用播放速度
                     print("从暂停位置继续播放，当前时间: \(player!.currentTime)")
                 } else {
                     player?.currentTime = startTime
                     currentLoop = 0 // 重置当前循环
                     applyVolumeBoost()
+                    applyPlaybackSpeed() // 应用播放速度
                     print("从起始位置重新播放，设置时间为: \(startTime)")
                 }
             }
@@ -217,7 +253,8 @@ class ViewController: UIViewController, UIDocumentPickerDelegate, AVAudioPlayerD
                 print("当前时间: \(currentTime), 结束时间: \(endTime), 当前循环: \(self.currentLoop + 1)/\(self.loopCount)")
                 statusLabel.text = "正在播放 (第 \(self.currentLoop + 1) 次 / \(self.loopCount))"
                 
-                let totalDuration = endTime - startTime
+                
+                let totalDuration = (endTime - startTime) / Double(self.selectedSpeed) // 调整时长
                 let currentProgress = (currentTime - startTime) / totalDuration
                 if !self.progressSlider.isTracking {
                     self.progressSlider.value = Float(max(0.0, min(1.0, currentProgress)))
